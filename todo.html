@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yapılacaklar</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f4f7; --card: #ffffff; --text: #1d1d22; --muted: #8a8a96;
+    --line: #e6e6ec; --accent: #4f6bed; --danger: #d94848;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141418; --card: #1e1e24; --text: #ececf1; --muted: #8b8b98;
+      --line: #2c2c35; --accent: #7b8ff5; --danger: #f06b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; padding: 48px 16px;
+  }
+  main { width: 100%; max-width: 560px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 28px; margin: 0; font-weight: 700; }
+  .user { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .user span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link { border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+
+  /* Giriş */
+  #auth { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  #auth h2 { margin: 0 0 4px; font-size: 18px; }
+  #auth input {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; outline: none;
+  }
+  #auth input:focus { border-color: var(--accent); }
+  .primary {
+    border: 0; background: var(--accent); color: #fff; font: inherit;
+    font-weight: 600; padding: 10px; border-radius: 8px; cursor: pointer;
+  }
+  .primary:disabled { opacity: .6; cursor: default; }
+  .msg { font-size: 14px; color: var(--danger); min-height: 1em; margin: 0; }
+  .msg.ok { color: var(--muted); }
+  .switch { font-size: 14px; color: var(--muted); text-align: center; margin: 0; }
+
+  /* Liste */
+  #add { display: flex; border-bottom: 1px solid var(--line); }
+  #new { flex: 1; border: 0; background: transparent; color: var(--text); padding: 16px; font: inherit; outline: none; }
+  #new::placeholder { color: var(--muted); }
+  #add button { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; padding: 0 20px; cursor: pointer; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  li:last-child { border-bottom: 0; }
+  li input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; flex: none; }
+  li .text { flex: 1; word-break: break-word; cursor: text; }
+  li.done .text { text-decoration: line-through; color: var(--muted); }
+  li .edit { flex: 1; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 8px; outline: none; }
+  li .del { border: 0; background: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0 4px; opacity: 0; transition: opacity .15s; }
+  li:hover .del, li .del:focus { opacity: 1; }
+  li .del:hover { color: var(--danger); }
+  li.empty { display: block; padding: 24px 16px; text-align: center; color: var(--muted); }
+  footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  .filters { display: flex; gap: 4px; }
+  footer button { border: 1px solid transparent; background: none; color: var(--muted); font: inherit; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
+  footer button:hover { color: var(--text); }
+  footer button.active { border-color: var(--accent); color: var(--accent); }
+  .hint { margin-top: 12px; font-size: 13px; color: var(--muted); text-align: center; }
+  #error { color: var(--danger); }
+  @media (hover: none) { li .del { opacity: 1; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Yapılacaklar</h1>
+    <div class="user" id="userbar" hidden>
+      <span id="email"></span>
+      <button class="link" id="logout">Çıkış</button>
+    </div>
+  </header>
+
+  <div class="card" id="loading"><p class="hint" style="padding:16px;margin:0">Yükleniyor…</p></div>
+
+  <form class="card" id="auth" hidden>
+    <h2 id="auth-title">Giriş yap</h2>
+    <input id="auth-email" type="email" placeholder="E-posta" autocomplete="email" required>
+    <input id="auth-pass" type="password" placeholder="Şifre (en az 6 karakter)" autocomplete="current-password" minlength="6" required>
+    <button class="primary" id="auth-btn" type="submit">Giriş yap</button>
+    <p class="msg" id="auth-msg"></p>
+    <p class="switch"><span id="switch-text">Hesabın yok mu?</span> <button type="button" class="link" id="switch">Kayıt ol</button></p>
+  </form>
+
+  <div id="app" hidden>
+    <div class="card">
+      <form id="add">
+        <input id="new" placeholder="Yeni görev ekle…" autocomplete="off" maxlength="500">
+        <button type="submit">Ekle</button>
+      </form>
+      <ul id="list"></ul>
+      <footer>
+        <span id="count"></span>
+        <div class="filters">
+          <button data-f="all">Tümü</button>
+          <button data-f="active">Aktif</button>
+          <button data-f="done">Tamamlanan</button>
+        </div>
+        <button id="clear">Tamamlananları sil</button>
+      </footer>
+    </div>
+    <p class="hint">Düzenlemek için göreve çift tıkla · Veriler Supabase'de saklanır <span id="error"></span></p>
+  </div>
+</main>
+
+<script>
+  const SUPABASE_URL = "https://mlebovljdkzogceaqrey.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_ibd1_7Z5E6eVcITQh5FwBQ_Plvx9MWg"; // herkese açık anahtar; erişimi RLS korur
+
+  const $ = s => document.querySelector(s);
+
+  if (!window.supabase) {
+    $("#loading").innerHTML = '<p class="hint" style="padding:16px;margin:0;color:var(--danger)">Supabase kütüphanesi yüklenemedi. İnternet bağlantını kontrol et.</p>';
+    throw new Error("supabase-js yüklenemedi");
+  }
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let items = [];
+  let filter = "all";
+  let mode = "login";
+  let currentUser;
+
+  const showError = e => {
+    $("#error").textContent = e ? "· Hata: " + (e.message || e) : "";
+    if (e) console.error(e);
+  };
+
+  // ---------- Giriş ----------
+  function setMode(m) {
+    mode = m;
+    const signup = m === "signup";
+    $("#auth-title").textContent = signup ? "Kayıt ol" : "Giriş yap";
+    $("#auth-btn").textContent = signup ? "Kayıt ol" : "Giriş yap";
+    $("#switch-text").textContent = signup ? "Zaten hesabın var mı?" : "Hesabın yok mu?";
+    $("#switch").textContent = signup ? "Giriş yap" : "Kayıt ol";
+    $("#auth-pass").autocomplete = signup ? "new-password" : "current-password";
+    $("#auth-msg").textContent = "";
+  }
+  $("#switch").onclick = () => setMode(mode === "login" ? "signup" : "login");
+
+  $("#auth").onsubmit = async e => {
+    e.preventDefault();
+    const email = $("#auth-email").value.trim();
+    const password = $("#auth-pass").value;
+    const msg = $("#auth-msg");
+    msg.className = "msg"; msg.textContent = "";
+    $("#auth-btn").disabled = true;
+    const { data, error } = mode === "signup"
+      ? await db.auth.signUp({ email, password })
+      : await db.auth.signInWithPassword({ email, password });
+    $("#auth-btn").disabled = false;
+    if (error) {
+      msg.textContent = error.message === "Invalid login credentials" ? "E-posta veya şifre hatalı." : error.message;
+    } else if (mode === "signup" && !data.session) {
+      msg.className = "msg ok";
+      msg.textContent = "Kayıt alındı. E-postandaki doğrulama linkine tıkla, sonra giriş yap.";
+    }
+  };
+
+  $("#logout").onclick = () => db.auth.signOut();
+
+  db.auth.onAuthStateChange((_event, session) => {
+    const user = session?.user ?? null;
+    if (currentUser !== undefined && user?.id === currentUser?.id) return;
+    currentUser = user;
+    $("#loading").hidden = true;
+    $("#auth").hidden = !!user;
+    $("#app").hidden = !user;
+    $("#userbar").hidden = !user;
+    if (user) {
+      $("#email").textContent = user.email;
+      setTimeout(load, 0); // auth callback içinde await yapmamak için
+    } else {
+      items = [];
+      $("#auth-pass").value = "";
+    }
+  });
+
+  // ---------- Veri ----------
+  async function load() {
+    await migrateLocal();
+    const { data, error } = await db.from("todos").select("id,text,done").order("created_at");
+    if (error) return showError(error);
+    showError(null);
+    items = data;
+    render();
+    $("#new").focus();
+  }
+
+  // Eski sürümde tarayıcıya kaydedilmiş görevleri bir kerelik Supabase'e taşı
+  async function migrateLocal() {
+    let old = [];
+    try { old = JSON.parse(localStorage.getItem("todo-items")) || []; } catch {}
+    if (!old.length) return;
+    const rows = old.filter(t => t.text).map(t => ({ text: String(t.text).slice(0, 500), done: !!t.done }));
+    const { error } = await db.from("todos").insert(rows);
+    if (error) return showError(error);
+    try { localStorage.removeItem("todo-items"); } catch {}
+  }
+
+  async function add(text) {
+    const { data, error } = await db.from("todos").insert({ text }).select("id,text,done").single();
+    if (error) return showError(error);
+    showError(null);
+    items.push(data);
+    render();
+  }
+
+  async function update(t, patch) {
+    const before = { ...t };
+    Object.assign(t, patch);
+    render();
+    const { error } = await db.from("todos").update(patch).eq("id", t.id);
+    if (error) { Object.assign(t, before); render(); showError(error); } else showError(null);
+  }
+
+  async function remove(ids) {
+    const before = items;
+    items = items.filter(t => !ids.includes(t.id));
+    render();
+    const { error } = await db.from("todos").delete().in("id", ids);
+    if (error) { items = before; render(); showError(error); } else showError(null);
+  }
+
+  // ---------- Arayüz ----------
+  function render() {
+    const list = $("#list");
+    list.innerHTML = "";
+    const shown = items.filter(t => filter === "all" || (filter === "done" ? t.done : !t.done));
+
+    if (!shown.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = items.length ? "Bu filtrede görev yok." : "Henüz görev yok. Yukarıdan ekleyebilirsin.";
+      list.append(li);
+    }
+
+    for (const t of shown) {
+      const li = document.createElement("li");
+      if (t.done) li.classList.add("done");
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = t.done;
+      cb.onchange = () => update(t, { done: cb.checked });
+
+      const span = document.createElement("span");
+      span.className = "text";
+      span.textContent = t.text;
+      span.ondblclick = () => startEdit(span, t);
+
+      const del = document.createElement("button");
+      del.className = "del";
+      del.title = "Sil";
+      del.textContent = "×";
+      del.onclick = () => remove([t.id]);
+
+      li.append(cb, span, del);
+      list.append(li);
+    }
+
+    $("#count").textContent = `${items.filter(t => !t.done).length} görev kaldı`;
+    document.querySelectorAll(".filters button").forEach(b =>
+      b.classList.toggle("active", b.dataset.f === filter));
+    $("#clear").style.visibility = items.some(t => t.done) ? "visible" : "hidden";
+  }
+
+  function startEdit(span, t) {
+    const input = document.createElement("input");
+    input.className = "edit";
+    input.maxLength = 500;
+    input.value = t.text;
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+    let finished = false;
+    const finish = commit => {
+      if (finished) return;
+      finished = true;
+      const v = input.value.trim();
+      if (!commit || v === t.text) return render();
+      if (v) update(t, { text: v });
+      else remove([t.id]);
+    };
+    input.onkeydown = e => {
+      if (e.key === "Enter") finish(true);
+      if (e.key === "Escape") finish(false);
+    };
+    input.onblur = () => finish(true);
+  }
+
+  $("#add").onsubmit = e => {
+    e.preventDefault();
+    const v = $("#new").value.trim();
+    if (!v) return;
+    $("#new").value = "";
+    add(v);
+  };
+
+  document.querySelectorAll(".filters button").forEach(b =>
+    b.onclick = () => { filter = b.dataset.f; render(); });
+
+  $("#clear").onclick = () => remove(items.filter(t => t.done).map(t => t.id));
+
+  setMode("login");
+</script>
+</body>
+</html>
